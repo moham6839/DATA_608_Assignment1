@@ -1,0 +1,466 @@
+---
+title: "Infrastructure Investment and Jobs Act Exploration using GGPlot2 Library in R"
+author: "Mohamed Hassan-El Serafi"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE)
+```
+
+
+```{r}
+library(tidyverse)
+library(stringr)
+library(reactable)
+```
+
+## Key Questions That Will Be Explored In This Analysis:
+
+* Is the allocation equitable based on the population of each of the States and Territories, or is bias apparent?
+
+* Does the allocation favor the political interests of the Biden administration?
+
+
+
+### Infrastructure Investment & Jobs Act Funding Dataset
+
+```{r}
+df <- read.csv("https://raw.githubusercontent.com/moham6839/DATA_608_Assignment1/main/IIJA%20FUNDING%20AS%20OF%20MARCH%202023(1).csv", check.names = FALSE)
+```
+
+
+```{r}
+reactable(df)
+```
+
+
+
+
+```{r}
+df <- rename(df, `state` = `State, Teritory or Tribal Nation`, `Total_Billions` = `Total (Billions)`)
+```
+
+
+
+```{r}
+df <- df %>%
+  mutate(state = replace(state, state == "DELEWARE", "DELAWARE"))
+```
+
+```{r}
+reactable(df)
+```
+
+
+
+I changed the values of the Total Billions column to reflect the actual values of the funding:
+
+
+```{r}
+df$Total_Billions <- df$Total_Billions*1e9
+```
+
+
+
+
+
+## Is the allocation equitable based on the population of each of the States and Territories, or is bias apparent?
+
+### Current Population of U.S. States and Territories
+
+
+
+```{r}
+df4 <- read.csv("https://raw.githubusercontent.com/moham6839/DATA_608_Assignment1/main/U.S.%20State%20Population%20Data.csv", check.names = FALSE, header=FALSE)
+```
+
+
+
+
+```{r}
+reactable(df4)
+```
+
+```{r}
+new_df4 <- df4 %>%
+  select(1, 5)
+```
+
+
+```{r}
+reactable(new_df4)
+```
+
+
+
+```{r}
+new_df5 <- new_df4 %>%
+  filter(!row_number() %in% c(1, 2, 3, 4,5, 6, 7, 8, 9, 63, 64, 65, 66)) 
+reactable(new_df5)
+```
+
+
+```{r}
+df6 <- new_df5 %>%
+  filter(!row_number() %in% c(54)) 
+reactable(df6)
+```
+
+
+
+
+
+```{r}
+df6$V1 <- sub("^.", "", df6$V1)
+```
+
+
+```{r}
+reactable(df6)
+```
+
+```{r}
+df7 <- rename(df6, state = V1, Population_Estimate_2022 = V5)
+```
+
+```{r}
+df7$Population_Estimate_2022 <- gsub(",", "", df7$Population_Estimate_2022)
+```
+
+```{r}
+reactable(df7)
+```
+
+```{r}
+df7 <- df7 %>%
+  mutate(across(where(is.character), toupper))
+```
+
+
+
+
+```{r}
+new_country_pop <- data.frame(c("AMERICAN SAMOA", "GUAM", "US VIRGIN ISLANDS", 
+                                "NORTHERN MARIANA ISLANDS", "TRIBAL COMMUNITIES"),
+                              c(44620, 169330, 104917, 51295, 9700000))
+names(new_country_pop) <- c("state", "Population_Estimate_2022")
+
+combined_df <- rbind(df7, new_country_pop)
+```
+
+```{r}
+reactable(combined_df)
+```
+
+
+```{r}
+combined_df$Population_Estimate_2022 = as.numeric(as.character(combined_df$Population_Estimate_2022))
+```
+
+
+
+
+```{r}
+final_df <- inner_join(df, combined_df, by="state")
+```
+
+```{r}
+reactable(final_df)
+```
+
+
+
+
+## Creating Per Capita Column
+
+In order to get a sense of the amount of funding in proportion to the population of each state/territory, I calculated the Per Capita allocation of funding to each person, dividing the amount of money by the state/territory population:
+
+
+
+```{r}
+final_df2 <- final_df %>%
+  mutate(Per_Capita = round((Total_Billions)/(Population_Estimate_2022), 2))
+reactable(final_df2)
+```
+
+
+
+### Plot of Population and Per Capita Distribution of Jobs Act Funding
+
+Using population data from the Census and CIA, I compared each state and territory's current population:
+
+
+
+
+```{r}
+final_df2 %>%
+  ggplot(mapping = aes(x=reorder(`state`, Population_Estimate_2022), y=`Population_Estimate_2022`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  theme_minimal() +
+  theme(plot.title=element_text(size=12, family="serif"),
+        axis.title = element_text(size=12, family="serif"),
+        axis.text.x = element_text(size=9, family="serif"),
+        text = element_text(size=7, family="serif")) +
+  labs(title = "Population Estimate of Each State/Territory",
+       y="Population",
+       x="State")
+```
+
+The five states/territories with the highest population are California, Texas, Florida, New York, and Pennsylvania. The five states/territories with the lowest population are American Samoa, Northern Mariana Islands, US Virgin Islands, Guam, and Wyoming.
+
+
+## Per Capita
+
+
+
+
+
+```{r}
+final_df2 %>%
+  ggplot(mapping = aes(x=reorder(`state`, Per_Capita), y=`Per_Capita`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  coord_flip() +
+  theme_minimal() +
+  theme(plot.title=element_text(size=12, family="serif"),
+        axis.title = element_text(size=12, family="serif"),
+        axis.text.x = element_text(size=9, family="serif"),
+        text = element_text(size=7, family="serif")) +
+  labs(title = "Per Capita Funding of Each U.S. State and Territory",
+       y="Per Capita",
+       x="State/Territory")
+```
+
+
+When analyzing the Per Capita breakdown of funding to state/territory population, there appears to be a bias towards allocating funds to states and territories that had low population levels. With the exception of Guam, the top 10 states with the most per capita funding were also in the bottom 10 in population. Montana had the 3rd-highest per capita funding and had the 13th-least population levels, while Guam had the 17th-highest per capita funding and 4th-lowest population levels.
+
+
+
+
+
+## Does the allocation favor the political interests of the Biden administration?
+
+
+
+### 2020 Presidential Election Dataset
+
+The U.S. territories (Puerto Rico, American Samoa, Guam, Northern Mariana Islands, Virgin Islands) are not allowed to vote in Presidential elections, and therefore will not be included in the analysis of comparing funding to the 2020 Presidential election results. Additionally, voting data from tribal communities were unavailable, and will also not be included in this specific analysis.
+
+
+```{r}
+df2 <- read.csv("https://raw.githubusercontent.com/moham6839/DATA_608_Assignment1/main/1976-2020-president.csv", check.names = FALSE)
+```
+
+
+```{r}
+df3 <- df2 %>%
+  select(year, state, candidate, party_detailed, candidatevotes, totalvotes) %>%
+  filter(year == 2020) %>%
+  filter(party_detailed == "DEMOCRAT" | party_detailed == "REPUBLICAN")
+```
+
+
+```{r}
+reactable(df3)
+```
+
+
+
+
+```{r}
+pres_funding_df <- inner_join(df, df3, by="state")
+```
+
+```{r}
+reactable(pres_funding_df)
+```
+
+
+```{r}
+pres_funding_df2 <- pres_funding_df %>%
+  mutate(Vote_Results_Pct = round((candidatevotes/totalvotes)*100, 2)) %>%
+  group_by(state) %>%
+  mutate(Party_Winner = party_detailed[which.max(Vote_Results_Pct)]) 
+```
+
+
+```{r}
+reactable(pres_funding_df2)
+```
+
+
+
+### Breakdown of Funding by States that Was Democrat and Republican Won in 2020 Presidential Election:
+
+
+
+
+```{r}
+pres_funding_df2 %>%
+  ggplot(mapping = aes(x=`Party_Winner`, y=`Total_Billions`, fill=`Party_Winner`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values=c("blue", "red")) +
+  theme_minimal() +
+  theme(plot.title=element_text(size=12, family="serif"),
+        axis.title = element_text(size=14, family="serif"),
+        legend.title = element_text(size=12, family="serif"),
+        axis.text.x = element_text(size=9, family="serif"),
+        axis.text.y = element_text(size=10, family="serif"),
+        legend.text = element_text(size=12, family="serif"),
+        text = element_text(size=10, family="serif")) +
+  labs(title = "Total Funding for States That Voted Democrat or Republican in 2020 Presidential Election",
+       y="Total (Billions)",
+       x="State",
+       fill="State Political Party Winner")
+```
+
+
+When examining the allocation of funding, Democratic-Won states received over \$ 20 Billion in funding, compared to Republican-Won states which received less than \$15 Billion.
+
+
+
+
+
+
+
+
+```{r}
+funding_rep_states <- pres_funding_df2 %>%
+  filter(party_detailed == "REPUBLICAN" & Party_Winner == "REPUBLICAN")
+```
+
+
+
+```{r}
+funding_rep_states %>%
+  ggplot(mapping = aes(x=reorder(`state`, Total_Billions), y=`Total_Billions`)) +
+  geom_bar(stat = "identity", fill="red", position = "dodge") +
+  coord_flip() +
+  theme_minimal() +
+  theme(plot.title=element_text(size=12, family="serif"),
+        axis.title = element_text(size=12, family="serif"),
+        axis.text.x = element_text(size=9, family="serif"),
+        text = element_text(size=10, family="serif")) +
+  labs(title = "States Lost by President Biden in 2020 Presidential Election",
+       y="Total (Billions)",
+       x="State")
+```
+
+The top 5 Republican-Won states that received the most funding were Texas, Florida, Ohio, North Carolina, and Louisiana, while the bottom 5 were Idaho, Nebraska, South Dakota, Kansas, and North Dakota.
+
+
+
+```{r}
+funding_dem_states <- pres_funding_df2 %>%
+  filter(party_detailed == "DEMOCRAT" & Party_Winner == "DEMOCRAT")
+```
+
+
+
+```{r}
+funding_dem_states %>%
+  ggplot(mapping = aes(x=reorder(`state`, Total_Billions), y=`Total_Billions`)) +
+  geom_bar(stat = "identity", fill="blue", position = "dodge") +
+  coord_flip() +
+  theme_minimal() +
+  theme(plot.title=element_text(size=12, family="serif"),
+        axis.title = element_text(size=12, family="serif"),
+        axis.text.x = element_text(size=9, family="serif"),
+        text = element_text(size=10, family="serif")) +
+  labs(title = "States Won by Biden in 2020 Presidential Election",
+       y="Total (Billions)",
+       x="State")
+```
+
+
+The top 5 Democratic-Won states that received the most funding were California, New York, Illinois, Pennsylvania, and Michigan, while the bottom 5 were New Hampshire, Delaware, Vermont, Hawaii and Washington, DC.
+
+
+
+
+
+
+### Combining Presidential Election and Per Capita Dataset
+
+
+
+```{r}
+combined_final_df <- inner_join(pres_funding_df2, final_df2, by="state")
+```
+
+```{r}
+reactable(combined_final_df)
+```
+
+```{r}
+combined_final_df2 <- rename(combined_final_df, `Total_Billions` = `Total_Billions.x`)
+```
+
+
+```{r}
+reactable(combined_final_df2)
+```
+
+
+
+```{r}
+combined_final_df2 %>%
+  ggplot(mapping = aes(x=reorder(`state`, Per_Capita), y=`Per_Capita`, fill=`Party_Winner`)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values=c("blue", "red")) +
+  coord_flip() +
+  theme_minimal() +
+  theme(plot.title=element_text(size=14, family="serif"),
+        axis.title = element_text(size=12, family="serif"),
+        legend.title = element_text(size=12, family="serif"),
+        axis.text.x = element_text(size=9, family="serif"),
+        legend.text = element_text(size=12, family="serif"),
+        text = element_text(size=7, family="serif")) +
+  labs(title = "Per Capita Funding of Each U.S. State and Territory",
+       y="Per Capita",
+       x="State/Territory",
+       fill="State Political Party Winner")
+```
+
+
+When combining the allocation of Per Capita funding with the Political Party Winner of each state in the 2020 Presidential Election, there doesn't appear to be a discernible bias. The top 4 states that had the highest per capita funding all went to the Republican Presidential candidate, Donald Trump, in 2020. Conversely, the bottom 3 states that received the lowest per capita funding also went to Republican-Won states. Interestingly, Florida and North Carolina has the 3rd and 9th highest populations, respectively, yet were the 2 lowest recipients of per capita funding. This reinforces the previous inference of possible bias in terms of funding not being proportionally allocated to states with large populations and states with small populations being given more funding.
+
+
+
+## Conclusion
+
+* States/Territories that had the smallest populations received some of the highest per capita funding from the Jobs Act.
+* States with the highest populations were in the bottom third in per capita funding, including New York, Florida, California, and Texas.
+* There was no discernible bias from the Biden Administration in terms of allocating funding based on which states he won and lost in the 2020 Presidential Election. Six of the top 10 states with the most per capita funding were won by Republican Presidential candidate Trump in 2020, while 6 of the bottom 10 states with the least per capita funding were won by President Biden.
+* Collectively, states that were won by President Biden in 2020 received over \$20 Billion in funding, while states Biden lost received less than \15 Billion. While this may indicate political bias, the per capita funding breakdown by state is a more accurate representation of how funding from the Jobs Act was allocated. 
+
+
+
+
+
+
+
+## References
+
+* https://www.census.gov/data/datasets/time-series/demo/popest/2020s-state-total.html
+
+* https://electionlab.mit.edu/data
+
+* https://www.cia.gov/the-world-factbook/countries/northern-mariana-islands/
+
+* https://www.cia.gov/the-world-factbook/countries/guam/
+
+* https://www.cia.gov/the-world-factbook/countries/virgin-islands/
+
+* https://www.cia.gov/the-world-factbook/countries/american-samoa/
+
+* https://www.ncoa.org/article/american-indians-and-alaska-natives-key-demographics-and-characteristics
+
+
+
+
+
+
+
